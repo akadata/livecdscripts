@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+# set the script to exit immediately on error
+set -e
+
+
+usage(){
+  cat << EOT
+
+  Creates an md5sum.txt file for the specified directory and its subfolders.
+  The md5sum file is left in the root of the folder you specified.
+
+  Usage:
+    mkmd5sum --for /media/memory_stick
+    mkmd5sum -f /media/memory_stick
+
+EOT
+exit 0;
+}
+
+# exit if there are no arguments
+[ $# -eq 0 ] && usage
+
+set -- `getopt -n$0 -u -a --longoptions="for:" "hf:" "$@"` || usage
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+       -f|--for) folder_to_sum="$2"; shift;;
+       -h| --help) usage;;
+       --) shift;break;;
+       *) break;; 
+    esac
+    shift
+done
+
+cd $folder_to_sum
+find . -type f -not -name md5sum.txt -not -path '*/isolinux/*' -print0 | xargs -0 -- md5sum > ./md5sum.txt

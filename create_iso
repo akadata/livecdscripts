@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+
+usage(){
+  cat <<-EOT
+
+Create an live CD iso based on a casper folder and an iso contents folder.
+
+Examples:
+
+sudo ./create_iso --casper ~/casper --iso_contents ~/iso_contents
+
+EOT
+exit 0;
+}
+
+
+# if args length equals 0 show usage and bail.
+[ $# -eq 0 ] && usage
+
+set -- `getopt -n$0 -u -a --longoptions="help casper: iso-contents: " "h c: i:" "$@"` || usage
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+       --casper) casper_folder="$2"; shift;;
+       -c) casper_folder="$2"; shift;;
+       --iso-contents) iso_contents="$2"; shift;;
+       -i) iso_contents="$2"; shift;;
+       -h | --help) usage; exit 0;;
+       --) shift;break;;
+       *) usage; exit 0;; 
+    esac
+    shift
+done
+
+# check that they are running as root
+if [ ! `id -u` -eq "0" ]; then
+  echo "You need to call this script using sudo."
+  exit 1
+fi
+
+# mv the contents of the casper folder into its counterpart in the iso_contents folder
+cp $casper_folder/* $iso_contents/casper/
+
+# generate a new md5sum.txt file
+cd $iso_contents
+find . -type f -not -name md5sum.txt -not -path '*/isolinux/*' -print0 | xargs -0 -- md5sum > ./md5sum.txt
+
+# now make an iso
+
+#mkisofs -r -V "Patientway Inc. Kiosk Client" -cache-inodes -J -l -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -o ../patientway-kiosk.iso .
+
+
+

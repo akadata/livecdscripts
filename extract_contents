@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+
+cleanup_and_exit () {
+  echo "Unmounting iso from /mnt and exiting."
+  umount /mnt
+  exit 1
+}
+
+trap cleanup_and_exit EXIT
+
+usage(){
+  cat << EOT
+
+Extracts the contents of an iso into a specified directory.
+
+Call this script with a path to an iso.  If a destination directory is not
+specified with the --to option, the contents of the iso extracted in the current
+directory.  The extraction process involves mounting an iso so you need to use
+sudo.
+
+Examples:
+
+sudo ./extract_contents --from ~/Downloads/ubuntu-12.04-desktop-amd64.iso
+sudo ./extract_contents --from ~/Downloads/ubuntu-12.04-desktop-amd64.iso --to ~/iso_guts
+
+EOT
+exit 0;
+}
+
+# set a default destination folder
+destination=`pwd`
+
+set_destination(){
+  destination="$1";
+}
+
+[ $# -eq 0 ] && usage
+# TODO - FIXME 
+# there are some big problems with the options handling here...
+set -- `getopt -n$0 -u -a --longoptions="help from: to: " "h f: t:" "$@"` || usage
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+       --from) iso_path="$2"; shift;;
+       -f) iso_path="$2"; shift;;
+       --to) set_destination "$2"; shift;;
+       -t) set_destination "$2"; shift;;
+       -h | --help) usage; exit 0;;
+       --) shift;break;;
+       *) usage; exit 0;; 
+    esac
+    shift
+done
+
+
+# check that they are running as root
+if [ ! `id -u` -eq 0 ]; then
+  echo "You need to call this script using sudo."
+  exit 1
+fi
+
+if [ -d /mnt ]; then
+  mount -o loop,ro $iso_path /mnt
+  if [ ! $? -eq "0" ]; then
+    echo "Could not mount the iso!"
+    exit 1
+  fi
+  cd $destination
+  if [ ! -d iso_contents ]; then
+    mkdir iso_contents
+    rsync --exclude=/casper/filesystem.* -a /mnt/ iso_contents
+    if [ ! $? -eq "0" ]; then
+      echo "Copy failed."
+    fi
+  else
+    echo "Whoa! There is an iso_contents directory here already!"
+  fi
+else
+  echo -e "We tried to mount on /mnt and failed. :("
+fi

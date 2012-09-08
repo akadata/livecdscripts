@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+
+
+usage(){
+  cat <<-EOT
+
+Create a squashfs compressed filesystem from a given folder.
+
+The output of this script will be a squashfs compressed version of the folder
+plus the manifest and other files that you would normally find in the casper
+folder of a live CD. You will need to place these files in the casper folder of
+an extracted live CD to use them.
+Call this script with a path to a folder 
+Examples:
+
+sudo ./squash_this --folder ~/squashfs-root
+sudo ./squash_this -f ~/squashfs-root --into ~/casper/
+
+EOT
+exit 0;
+}
+
+# set a default destination folder
+destination=`pwd`
+
+set_destination(){
+  destination="$1";
+}
+
+# if args length equals 0 show usage and bail.
+[ $# -eq 0 ] && usage
+
+set -- `getopt -n$0 -u -a --longoptions="help folder: to: " "h f: i:" "$@"` || usage
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+       --folder) folder="$2"; shift;;
+       -f) folder="$2"; shift;;
+       --into) set_destination "$2"; shift;;
+       -i) set_destination "$2"; shift;;
+       -h | --help) usage; exit 0;;
+       --) shift;break;;
+       *) usage; exit 0;; 
+    esac
+    shift
+done
+
+# check that they are running as root
+if [ ! `id -u` -eq "0" ]; then
+  echo "You need to call this script using sudo."
+  exit 1
+fi
+
+# All the files genereated in this script are destined to sit in a directory
+# called "casper" in the root of the live CD. In addition to the files we
+# create here, there are also the vmlinuz and initrd files.  We'll create that
+# directory here as a container for these files and deal with adding vmlinuz
+# and initrd when we actually construct the CD.
+
+cd $destination
+output_dir="$destination/casper"
+
+mkdir -p $output_dir
+if [ ! $? -eq "0" ]; then
+  "There is an existing casper directory in your selected output directory."
+  exit 1;
+fi
+
+# first generate the size file
+du -sx --block-size=1 $folder | cut -f1 > $output_dir/filesystem.size
+if [ ! $? -eq "0" ]; then
+  echo "Could not write the size file."
+  exit 1;
+fi
+
+# A note on manifests the filesystem.manifest is a list of packages installed
+# on the squashfs filesystem.  filesystem.manifest-remove is the list of
+# packages to be removed to leave you with your base system.  So to find the
+# packages in the base install you would need to subtract manifest-remove from
+# the manifest.  Most of the documentation you can find talks about the old
+# filesystem.manifest-desktop which seems to have phased out in Ubuntu Precise.
+# See: https://launchpad.net/ubuntu/+source/ubiquity/2.7.6
+
+# then the filesystem.manifest:
+chroot $folder dpkg-query -W --showformat='${Package} ${Version}\n' > $output_dir/filesystem.manifest
+if [ ! $? -eq "0" ]; then
+  echo "Attempt to chroot to $folder failed."
+  exit 1;
+fi
+
+# then the manifest-remove this seems to be an arbitrary list that is version
+# dependent rather than something you can generate so for the moment we are
+# assuming Ubuntu Precise and simply writing out the package list for that.
+read -r -d '' manifest_remove <<EOL
+apt-clone
+archdetect-deb
+btrfs-tools
+casper
+cifs-utils
+cryptsetup
+dmraid
+dpkg-repack
+ecryptfs-utils
+firefox-locale-en
+firefox-locale-es
+firefox-locale-pt
+firefox-locale-zh-hans
+gir1.2-json-1.0
+gir1.2-timezonemap-1.0
+gir1.2-xkl-1.0
+gparted
+jfsutils
+keyutils
+kpartx
+kpartx-boot
+language-pack-en
+language-pack-en-base
+language-pack-es
+language-pack-es-base
+language-pack-gnome-en
+language-pack-gnome-en-base
+language-pack-gnome-es
+language-pack-gnome-es-base
+language-pack-gnome-pt
+language-pack-gnome-pt-base
+language-pack-gnome-zh-hans
+language-pack-gnome-zh-hans-base
+language-pack-pt
+language-pack-pt-base
+language-pack-zh-hans
+language-pack-zh-hans-base
+libdebconfclient0
+libdebian-installer4
+libdmraid1.0.0.rc16
+libecryptfs0
+libgtkmm-2.4-1c2a
+libnss3-1d
+libreadline5
+localechooser-data
+lupin-casper
+python-pyicu
+rdate
+realpath
+reiserfsprogs
+ubiquity
+ubiquity-casper
+ubiquity-frontend-gtk
+ubiquity-slideshow-ubuntu
+ubiquity-ubuntu-artwork
+user-setup
+wamerican
+xfsprogs
+EOL
+echo $manifest_remove > $output_dir/filesystem.manifest-remove
+
+# and finally we compress the folder
+
+mksquashfs $folder $output_dir/filesystem.squashfs

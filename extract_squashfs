@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+usage(){
+  cat <<EOM
+
+Extracts the squashfs compressed filesystem out of a live cd iso.
+
+Call this script with a path to an iso. If a destination directory is not
+specified with the --to option, the fs will be unsquashed in the current
+directory. The extraction process involves mounting an iso so you need to use
+sudo.
+
+Examples:
+
+sudo ./extract_squashfs --from ~/Downloads/ubuntu-12.04-desktop-amd64.iso
+sudo ./extract_squashfs --from ~/Downloads/ubuntu-12.04-desktop-amd64.iso --to ~/iso_guts
+
+EOM
+exit 0;
+}
+
+
+# set a default destination folder
+destination=`pwd`
+
+set_destination(){
+  destination="$1";
+}
+
+# if args length is 0 show usage and bail.
+[ $# -eq 0 ] && usage
+
+set -- `getopt -n$0 -u -a --longoptions="help from: to: " "h f: t:" "$@"` || usage
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+       --from) iso_path="$2"; shift;;
+       -f) iso_path="$2"; shift;;
+       --to) set_destination "$2"; shift;;
+       -t) set_destination "$2"; shift;;
+       -h | --help) usage; exit 0;;
+       --) shift;break;;
+       *) usage; exit 0;; 
+    esac
+    shift
+done
+
+# give m
+if [ ! `id -u` -eq 0 ]; then
+  echo "You need to call this script using sudo."
+  exit 1
+fi
+
+if [ -d /mnt ]; then
+  mount -o loop,ro $iso_path /mnt
+  cd $destination
+  unsquashfs /mnt/casper/filesystem.squashfs
+  if [ ! $? -eq 0 ]; then
+    echo "Couldn't find the squashfs. Is this really a live CD?"
+  fi
+  umount /mnt
+else
+  echo -e "We tried to mount on /mnt and failed. :("
+fi
